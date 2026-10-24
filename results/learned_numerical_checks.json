@@ -1,0 +1,28 @@
+{
+  "jacobian": {
+    "seed": 2026081998,
+    "ambient_dimension": 5,
+    "hidden_width": 17,
+    "sigma": 0.12,
+    "centered_difference_step": 1e-06,
+    "operator_norm_error": 1.6862292620410568e-10,
+    "max_absolute_error": 1.1336465099986981e-10
+  },
+  "plane_sampler": {
+    "seed": 2026081997,
+    "sample_size": 4000000,
+    "empirical_second_moments": [
+      0.5681064284673135,
+      0.16700554779059448
+    ],
+    "theoretical_second_moments": [
+      0.5679545454545453,
+      0.16704545454545452
+    ],
+    "relative_errors": [
+      0.0002674210709004807,
+      0.000238897580114536
+    ],
+    "max_relative_error": 0.0002674210709004807
+  }
+}

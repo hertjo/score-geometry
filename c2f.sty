@@ -1,0 +1,81 @@
+% c2f.sty -- layout matching "Discrete Beckmann Transport Models" (Tang & Wang, 2026):
+% letter paper, Latin Modern, sans-serif section headings, lavender title/abstract box and theorem boxes,
+% violet figure labels with italic captions, blue links.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{c2f}[2026/10/08 Coarse-to-fine Beckmann transport paper style]
+
+\RequirePackage[T1]{fontenc}
+\RequirePackage{lmodern}
+\RequirePackage[letterpaper,margin=1in]{geometry}
+\RequirePackage{amsmath,amssymb,amsthm,mathtools,bm}
+\RequirePackage{xcolor}
+\RequirePackage{graphicx}
+\RequirePackage{booktabs}
+\RequirePackage{enumitem}
+\RequirePackage[most]{tcolorbox}
+\RequirePackage{titlesec}
+\RequirePackage[font={it,small},labelfont={sf,bf,color=c2fviolet},labelsep=quad,justification=justified]{caption}
+\RequirePackage[numbers,sort&compress]{natbib}
+\RequirePackage[colorlinks=true,linkcolor=c2flink,citecolor=c2flink,urlcolor=c2flink]{hyperref}
+\RequirePackage[capitalize,nameinlink]{cleveref}
+\RequirePackage{microtype}
+
+\definecolor{c2fviolet}{HTML}{6B67EE}
+\definecolor{c2fnavy}{HTML}{0500B5}
+\definecolor{c2fbox}{HTML}{EDECFF}
+\definecolor{c2fedge}{HTML}{8E8AF0}
+\definecolor{c2flink}{HTML}{2B5BD7}
+
+% sans-serif bold section headings, as in the original
+\titleformat{\section}{\sffamily\bfseries\Large}{\thesection}{1em}{}
+\titleformat{\subsection}{\sffamily\bfseries\large}{\thesubsection}{1em}{}
+\titleformat{\paragraph}[runin]{\sffamily\bfseries}{}{}{}
+\titlespacing*{\paragraph}{0pt}{0.8ex}{0.8em}
+
+% title / abstract box
+\newcommand{\cfttitle}{}\newcommand{\cftauthors}{}\newcommand{\cftaffil}{}\newcommand{\cftabstract}{}\def\cftcorr{}
+\newcommand{\PaperTitle}[1]{\renewcommand{\cfttitle}{#1}}
+\newcommand{\PaperAuthors}[1]{\renewcommand{\cftauthors}{#1}}
+\newcommand{\PaperAffiliations}[1]{\renewcommand{\cftaffil}{#1}}
+\newcommand{\PaperAbstract}[1]{\renewcommand{\cftabstract}{#1}}
+\newcommand{\PaperCorrespondence}[1]{\renewcommand{\cftcorr}{#1}}
+\newcommand{\MakeTitleBox}{%
+  \begin{tcolorbox}[enhanced,colback=c2fbox!55,colframe=c2fedge,arc=10pt,boxrule=0.9pt,left=16pt,right=16pt,top=14pt,bottom=12pt]
+    \begin{center}
+      {\sffamily\bfseries\LARGE\color{c2fnavy}\cfttitle\par}\vspace{1.1em}
+      {\sffamily\bfseries\large\cftauthors\par}\vspace{0.5em}
+      {\small\cftaffil\par}
+    \end{center}\vspace{0.6em}
+    \noindent{\sffamily\bfseries\color{c2fviolet}Abstract.}\ \cftabstract\par
+    \ifx\cftcorr\empty\else\vspace{0.6em}\noindent{\sffamily\bfseries\small Correspondence:}\ {\small\cftcorr}\par\fi
+  \end{tcolorbox}\vspace{0.8em}}
+
+% theorem-like environments in lavender boxes with bold run-in headings
+\newtheoremstyle{c2f}{0pt}{0pt}{\itshape}{}{\bfseries}{.}{0.5em}{\thmname{#1}\thmnumber{ #2}\thmnote{ (#3)}}
+\newtheoremstyle{c2fup}{0pt}{0pt}{\normalfont}{}{\bfseries}{.}{0.5em}{\thmname{#1}\thmnumber{ #2}\thmnote{ (#3)}}
+\theoremstyle{c2f}
+\newtheorem{theoreminner}{Theorem}[section]
+\newtheorem{propositioninner}[theoreminner]{Proposition}
+\newtheorem{lemmainner}[theoreminner]{Lemma}
+\newtheorem{corollaryinner}[theoreminner]{Corollary}
+\theoremstyle{c2fup}
+\newtheorem{definitioninner}[theoreminner]{Definition}
+\newtheorem{assumptioninner}[theoreminner]{Assumption}
+\newtheorem{remark}[theoreminner]{Remark}
+\tcbset{c2fthm/.style={enhanced,breakable,colback=c2fbox!70,colframe=c2fedge,boxrule=0.6pt,arc=2pt,left=8pt,right=8pt,top=6pt,bottom=6pt,before skip=10pt,after skip=10pt}}
+\newenvironment{theorem}[1][]{\begin{tcolorbox}[c2fthm]\ifx\relax#1\relax\begin{theoreminner}\else\begin{theoreminner}[#1]\fi}{\end{theoreminner}\end{tcolorbox}}
+\newenvironment{proposition}[1][]{\begin{tcolorbox}[c2fthm]\ifx\relax#1\relax\begin{propositioninner}\else\begin{propositioninner}[#1]\fi}{\end{propositioninner}\end{tcolorbox}}
+\newenvironment{lemma}[1][]{\begin{tcolorbox}[c2fthm]\ifx\relax#1\relax\begin{lemmainner}\else\begin{lemmainner}[#1]\fi}{\end{lemmainner}\end{tcolorbox}}
+\newenvironment{corollary}[1][]{\begin{tcolorbox}[c2fthm]\ifx\relax#1\relax\begin{corollaryinner}\else\begin{corollaryinner}[#1]\fi}{\end{corollaryinner}\end{tcolorbox}}
+\newenvironment{definition}[1][]{\begin{tcolorbox}[c2fthm,colback=white,colframe=c2fedge!70]\ifx\relax#1\relax\begin{definitioninner}\else\begin{definitioninner}[#1]\fi}{\end{definitioninner}\end{tcolorbox}}
+\newenvironment{assumption}[1][]{\begin{tcolorbox}[c2fthm,colback=white,colframe=c2fedge!70]\ifx\relax#1\relax\begin{assumptioninner}\else\begin{assumptioninner}[#1]\fi}{\end{assumptioninner}\end{tcolorbox}}
+\crefname{theoreminner}{Theorem}{Theorems}
+\crefname{propositioninner}{Proposition}{Propositions}
+\crefname{lemmainner}{Lemma}{Lemmas}
+\crefname{corollaryinner}{Corollary}{Corollaries}
+\crefname{definitioninner}{Definition}{Definitions}
+\crefname{assumptioninner}{Assumption}{Assumptions}
+\crefname{remark}{Remark}{Remarks}
+
+\setlist{itemsep=2pt,topsep=4pt}
+\endinput

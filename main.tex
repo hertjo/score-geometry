@@ -1,0 +1,988 @@
+\documentclass[10pt]{article}
+\usepackage{c2f}
+\hypersetup{pdftitle={Score Geometry at Vanishing Density: Tilted-Gaussian Limits and Spectrally Calibrated Optimization},pdfauthor={Johannes Herter}}
+\input{math_commands.tex}
+\usepackage{multirow,array}
+\usepackage{longtable}
+\usepackage{subcaption}
+\usepackage{placeins}
+\usepackage{flafter}
+\usepackage{url}
+\setlength{\emergencystretch}{3em}
+% Only give a float its own page when it would genuinely fill one.
+\renewcommand{\floatpagefraction}{0.90}
+\renewcommand{\bottomfraction}{0.70}
+
+% key-point box in the lavender of the title box, with a violet tab
+\newtcolorbox{takeawaybox}[1][]{enhanced,colback=c2fbox!55,colframe=c2fedge,boxrule=0.6pt,arc=2pt,
+  left=8pt,right=8pt,top=8pt,bottom=6pt,before skip=1.7em,after skip=0.9em,
+  overlay={\node[anchor=south west,fill=c2fviolet,text=white,rounded corners=1.8pt,inner xsep=6pt,inner ysep=2.4pt,
+  font=\sffamily\bfseries\small] at ([xshift=8pt,yshift=-4.5pt]frame.north west) {#1};}}
+\theoremstyle{c2fup}
+\newtheorem{example}[theoreminner]{Example}
+
+\newcommand{\M}{\mathcal{M}}
+\newcommand{\T}{\mathrm{T}}
+\newcommand{\N}{\mathrm{N}}
+\newcommand{\vol}{\operatorname{Vol}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\op}{\mathrm{op}}
+\newcommand{\dist}{\operatorname{dist}}
+\newcommand{\range}{\operatorname{range}}
+\newcommand{\grad}{\operatorname{grad}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\Proj}{\operatorname{Proj}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Id}{I}
+\newcommand{\cN}{\mathcal{N}}
+
+\PaperTitle{Score Geometry at Vanishing Density:\\[2pt] Tilted-Gaussian Limits and Spectrally Calibrated Optimization}
+\PaperAuthors{Johannes Herter}
+\PaperAffiliations{Independent Researcher}
+\PaperAbstract{%
+For small Gaussian noise, denoiser values approximate nearest-point projection onto a data manifold, while denoiser Jacobians are often treated as tangent-space projectors.  At a regular positive-density point, the Jacobian has this projector limit, whereas full support alone does not guarantee it: the density may vanish at an isolated point without removing that point from the support.  We analyze zeros of finite order.  If the first nonzero local density jet is a nonnegative homogeneous polynomial $q_m$ of degree $m$, then the normalized posterior covariance, equivalently the denoiser Jacobian, converges to $UC_{q_m}U^\top$.  The matrix $C_{q_m}$ is the covariance of a $q_m$-tilted Gaussian.  The limit is generally not a projector, but its range is the tangent space, it is positive definite there, and its positive eigenvalues sum to $k+m$.  A smooth full-support circle makes the failure explicit.  Density-floor and moving-query calculations show that the altered spectral scaling persists on the noise scale rather than only at the zero.  Because the limiting tangent range remains separated from the normal space, top-$k$ spectral projection recovers the tangent projector asymptotically, and it is stable to estimation error below half the tangent-normal eigengap.  A residual form of the same bound replaces that error by its tangent-normal coupling block, so error confined to eigenvalue scale does not move the recovered tangent space.  We use that observation to analyze a calibrated manifold optimizer, including population and learned oracle errors and a local invariant basin.  Population quadrature, repeated empirical-posterior estimation, and learned-denoiser experiments on circles and a rotated $d=16,k=2$ model separate recovery of spectral range from recovery of eigenvalue scale.  In an exactly linearized model problem, calibrating both the tangent update and the landing operation widens the local stability interval to one that no longer depends on the vanishing order, and in learned step-size sweeps it correspondingly enlarges the region of low final objective gap.}
+
+\begin{document}
+\MakeTitleBox
+
+
+\section{Introduction}
+\label{sec:intro}
+
+Many high-dimensional distributions are modeled as being supported on, or concentrated near, a smooth low-dimensional manifold $\M\subset\R^d$.  A Gaussian denoiser trained on such a distribution also contains information about this local geometry.  Tweedie's identity writes the posterior mean as a score step, while differentiation identifies the denoiser Jacobian with a normalized posterior covariance.  These identities motivate the use of denoiser values as approximations to nearest-point projection and denoiser Jacobians as approximations to tangent projection \citep{alain2014regularized,stanczuk2024diffusion,manor2024posterior,kharitenko2026landing,bamberger2026metric}.
+
+At a point of positive manifold density, the posterior in tangent coordinates becomes asymptotically standard Gaussian, so its covariance tends to the identity.  At a density zero, the same rescaling retains the first nonzero density jet.  The limiting tangent law is a \emph{polynomially tilted} Gaussian, whose covariance need not be the identity.  Full topological support rules out an open set of zero mass but not an isolated density zero.  This separates tangent range from eigenvalue scale and raises the questions of which geometry remains identifiable and whether it is sufficient for optimization.
+
+At every finite-order zero, the denoiser Jacobian has a limit of the form $UC_qU^\top$, with tangent range and the jet-shape-independent trace law $\tr C_q=k+m$.  A two-order expansion gives an $O(\sigma^2)$ operator-norm remainder.  A smooth full-support circle supplies a counterexample to an unqualified projector limit \citep{kharitenko2026landing}.  The density-floor crossover $\delta\asymp\sigma^m$ describes nearby positive floors.  A uniform normal-offset boundary-layer expansion treats queries near a fixed zero and gives the corresponding eigengap and landing bias.
+
+The surviving range suggests a correction.  Hard spectral calibration recovers the tangent projector, while the soft filter approximates it; both admit perturbation bounds under Jacobian error, and the uncalibrated trace continues to record the vanishing order asymptotically.  For spectrally calibrated denoising Riemannian gradient descent (SC-DRGD), we prove global inexact-oracle bounds conditional on the visited set.  A local invariant-basin result verifies that condition near an ambient stationary point whose tangent Hessian is positive definite.  The evidence follows the same progression: population quadrature, $48$-replicate finite-sample posterior estimation, and $12$ independent training seeds per problem, for $36$ noise-conditional MLP denoisers in total.  The learned tests include a rotated $d=16,k=2$ anisotropic zero and end-to-end optimization ablations.
+
+\begin{takeawaybox}[What the spectrum retains]
+At a finite-type density zero, the limiting eigenspace and eigenvalues answer different questions.  The nonzero eigenspace of the limiting operator is $\T_p\M$, but its eigenvalues depend on the leading density jet and sum to $k+m$.  Spectral projection of that operator retains the tangent space while discarding this density-dependent scale.
+\end{takeawaybox}
+
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Scores, denoisers, and posterior covariance.}
+Tweedie's formula provides the classical empirical-Bayes link between scores and posterior means \citep{efron2011tweedie}.  Denoising score matching turns that identity into a learning principle \citep{vincent2011connection}, and \citet{alain2014regularized} connected the local behavior of regularized autoencoders to the score.  In diffusion models, posterior covariance is used to describe local uncertainty and geometry \citep{manor2024posterior,kadkhodaie2024generalization}; its leading eigenvalues also serve as an out-of-distribution score \citep{shoushtari2026eigenscore}.  At a finite-type zero, our calculation separates spectral range from scale: the nonzero eigenspace can equal the tangent space even when the leading eigenvalues are inflated.
+
+\paragraph{Diffusion geometry and intrinsic dimension.}
+That a score-based model recovers the support of the data distribution at all was established by \citet{pidstrigach2022score}, and quantitative convergence under the manifold hypothesis by \citet{debortoli2022convergence}.  Recovering the support is a weaker property than recovering the tangent metric, and the two come apart at a density zero: the support is unchanged there, while the limiting eigenvalues are not.  Small-noise score derivatives separate tangent and normal directions and support local intrinsic-dimension estimation \citep{stanczuk2024diffusion,ventura2025manifolds,osada2026local}.  The Fokker-Planck estimator of \citet{kamkari2024geometric} reads local intrinsic dimension from the same small-noise limit, and its correctness argument treats affine submanifolds, so a finite-type zero is orthogonal to that analysis rather than in competition with it.  \citet{leung2025convolutions} extend that analysis to disjoint unions of submanifolds of differing dimension, a form of heterogeneity across components rather than within a single chart.  The density model matters for this interpretation.  \citet{yeats2025connection} analyze score matching under a locally constant-density approximation, while \citet{chen2026riemannian} obtain $O(\sigma^2)$ density-derivative expansions and nonparametric estimators for tangent spaces and curvature under uniform manifold sampling.  At a finite-type zero, the leading density jet instead survives the rescaling.  Sampling-density correction has an analogous role in graph and kernel methods that recover intrinsic geometry \citep{coifman2006diffusion,berry2016variable}.  For denoiser Jacobians, the trace identity gives an exact counterpart: at a finite-type zero, the uncorrected spectral trace converges to $k+m$ rather than $k$ in the small-noise limit.  The local Hessian filtering of \citet{osada2026local} concerns high-dimensional normal noise rather than finite-order density zeros or the tilted-Gaussian limit.
+
+\paragraph{Optimization over implicit manifolds.}
+Classical Riemannian optimization assumes access to tangent projectors and retractions \citep{absil2008optimization,boumal2023introduction}.  Work on learned manifolds replaces these operations with denoisers and their Jacobians \citep{kharitenko2026landing}, learns a conditional carré-du-champ operator \citep{bamberger2026metric}, or constructs pullback and iso-Riemannian geometries \citep{diepeveen2025pullback,diepeveen2026iso}.  \citet{saito2025tangential} instead build a training-free metric on noise space directly from the score Jacobian, relying on the same tangent-normal spectral separation that Proposition~\ref{prop:hard} exploits.  Up to bandwidth normalization, the carré-du-champ target is the mean-centered conditional covariance studied here.  Theorem~\ref{thm:finite} determines its limit at finite-type zeros.  Their Corollary~4.2 states the tangent-projector limit for a smooth density without a positivity requirement, so the circle of Section~\ref{sec:counterexample} is a counterexample there as well: since the conditional carré-du-champ operator equals $\tfrac12H_\sigma$ at bandwidth $\varepsilon=\sigma^2$, its limit at that density zero is $\tfrac32tt^\top$ rather than $tt^\top$.  Other score-geometry analyses impose an explicit positive lower bound on the density \citep{stanczuk2024diffusion,li2026scores,zhang2026score}.  The present analysis allows the density to vanish and identifies the geometric information that remains.
+
+\section{Setup and exact score identities}
+\label{sec:setup}
+
+Let $\M\subset\R^d$ be an embedded $k$-dimensional manifold without boundary, and let the clean variable $X\sim\mu$ have density $\rho\ge0$ with respect to Riemannian volume on $\M$.  We assume $1\le k<d$ throughout.  The full-dimensional case has no tangent-normal separation and is omitted.  Appendix~\ref{app:notation} collects the recurring notation.  Throughout, $\|\cdot\|$ is the Euclidean norm on vectors and $\|\cdot\|_\op$ the operator norm on matrices; applied to a map it is the Euclidean norm of the value at the stated point.  For $G\sim\cN(0,I_d)$ independent of $X$, observe
+\begin{equation}
+  Y_\sigma=X+\sigma G,
+  \qquad
+  p_\sigma(y)=(2\pi\sigma^2)^{-d/2}
+  \int_\M e^{-\|y-x\|^2/(2\sigma^2)}\,\mu(dx).
+\end{equation}
+Write $s_\sigma=\nabla\log p_\sigma$ and define the population denoiser and link Hessian
+\begin{equation}
+  D_\sigma(y)=y+\sigma^2s_\sigma(y),
+  \qquad
+  H_\sigma(y)=\nabla D_\sigma(y)=I_d+\sigma^2\nabla^2\log p_\sigma(y).
+  \label{eq:link}
+\end{equation}
+
+\begin{proposition}[Tweedie mean and covariance identities]
+\label{prop:tweedie}
+Whenever $p_\sigma(y)>0$,
+\begin{equation}
+  D_\sigma(y)=\E[X\mid Y_\sigma=y],
+  \qquad
+  H_\sigma(y)=\sigma^{-2}\Cov(X\mid Y_\sigma=y)\succeq0.
+  \label{eq:tweedie}
+\end{equation}
+\end{proposition}
+
+The second identity shows that the tangent eigenvalues of $H_\sigma$ are variances of the rescaled local posterior rather than fixed geometric constants.  Appendix~\ref{app:tweedie} proves both identities by differentiating under the integral.
+
+\section{Finite-type density zeros}
+\label{sec:finite}
+
+Fix $p\in\M$.  Let $U_p:\R^k\to\T_p\M$ have orthonormal columns, and use a normal graph chart
+\begin{equation}
+  F_p(z)=p+U_pz+g_p(z),\qquad g_p(z)\in\N_p\M,\quad
+  g_p(0)=Dg_p(0)=0.
+  \label{eq:chart}
+\end{equation}
+Let $J_p(z)=\sqrt{\det(DF_p(z)^\top DF_p(z))}$ and define the effective chart density $a_p(z)=\rho(F_p(z))J_p(z)$.  Since $DF_p^\top DF_p=I+Dg_p^\top Dg_p$ and $Dg_p(0)=0$, we have $J_p(z)=1+O(\|z\|^2)$, so $a_p$ and $\rho\circ F_p$ have the same jets through order two; the leading jet in \eqref{eq:densityjet} may therefore be read off the density itself whenever $m\le2$.
+
+\begin{definition}[Finite-type point]
+\label{def:finite}
+The density has a \emph{finite-type point of order $m$} at $p$ if, for a nonzero homogeneous polynomial $q_m$ of degree $m$,
+\begin{equation}
+  a_p(z)=q_m(z)+q_{m+1}(z)+O(\|z\|^{m+2}),
+  \label{eq:densityjet}
+\end{equation}
+where $q_{m+1}$ is homogeneous of degree $m+1$.  For the limit without the stated rate, it is enough that $a_p(z)=q_m(z)+o(\|z\|^m)$.
+The case $m=0$ is a regular positive-density point; a finite-type \emph{zero} has $m\ge2$.  The terminology follows the classification of degenerate critical points by the order of vanishing in the asymptotic analysis of oscillatory and Laplace-type integrals \citep{varchenko1976newton}.
+\end{definition}
+
+Because $a_p\ge0$, its first nonzero homogeneous jet is nonnegative.  It cannot have odd degree: otherwise $q_m(-z)=-q_m(z)$ would force $q_m\equiv0$.  Thus every finite vanishing order is even.  This parity conclusion is a statement about polynomial jets, not about density zeros in general.  Polynomiality of $q_m$ is used only here and in Lemma~\ref{lem:universal-gap}, whose uniform constant ranges over the finite-dimensional space of degree-$m$ forms.  The limit \eqref{eq:hlimit} and the trace law need only that $q_m$ be continuous, nonnegative, and homogeneous of some degree $m>0$, because the trace identity follows from Euler's relation.  Effective densities with $a_p(z)\asymp\|z\|^{3}$ or $\|z\|^{1/2}$ are of that kind and satisfy $\tr C_{q_m}=k+m$ with $m=3$ and $m=1/2$, yet they lie outside Definition~\ref{def:finite}; Section~\ref{sec:roadmap} records this restriction.
+
+Because $q_m$ is even, the $q_m$-tilted standard Gaussian has mean zero.  For $Z\sim\cN(0,I_k)$, define its covariance
+\begin{equation}
+  C_{q_m}
+  :=\frac{\E[ZZ^\top q_m(Z)]}{\E[q_m(Z)]}.
+  \label{eq:Cq}
+\end{equation}
+When the degree is clear, we write $C_q=C_{q_m}$.
+
+\begin{theorem}[Score geometry at a finite-type point]
+\label{thm:finite}
+Suppose $\M$ is $C^3$ near $p$, its normal graph satisfies
+$g_p(z)=\tfrac12\mathrm{II}_p[z,z]+R_g(z)$ with
+$\|R_g(z)\|\le C\|z\|^3$, and the effective density satisfies
+\eqref{eq:densityjet}.  Then $m$ is even, $q_m\ge0$, and, as $\sigma\downarrow0$,
+\begin{align}
+  D_\sigma(p)&=p+\sigma^2b_{p,q}+O(\sigma^3),
+  \label{eq:meanlimit}\\
+  H_\sigma(p)&=U_pC_{q_m}U_p^\top+O(\sigma^2)
+  \quad\text{in operator norm}.
+  \label{eq:hlimit}
+\end{align}
+Moreover,
+\begin{equation}
+  C_{q_m}\succ0,\qquad
+  \range(U_pC_{q_m}U_p^\top)=\T_p\M,\qquad
+  \tr(C_{q_m})=k+m.
+  \label{eq:trace}
+\end{equation}
+If only $a_p(z)=q_m(z)+o(\|z\|^m)$ and $\M$ is $C^1$ near $p$ with $g_p(z)=o(\|z\|)$, the convergence in \eqref{eq:hlimit} still holds without a rate.  The $C^1$ requirement is what makes $J_p$, and hence $a_p$, defined.
+\end{theorem}
+
+\begin{corollary}[Positive-density projector limit and coordinate invariance]
+\label{cor:regular}
+Under the regularity assumptions of Theorem~\ref{thm:finite}, if $\rho(p)>0$, then $m=0$, $C_{q_0}=I_k$, and
+$H_\sigma(p)\to P_{\T_p\M}$.  More generally, the ambient limit in
+\eqref{eq:hlimit} is independent of the orthonormal tangent frame: replacing
+$U_p$ by $U_pO$, $O\in O(k)$, replaces $C_{q_m}$ by
+$O^\top C_{q_m}O$ and leaves $U_pC_{q_m}U_p^\top$ unchanged.  The order $m$ and
+the limit are likewise unchanged under any local parametrization $\psi$ with
+$\psi(0)=p$ and $D\psi(0)=U_p$, since such a reparametrization is tangent to the
+identity and multiplies the effective density by a factor tending to one, so it
+preserves the leading jet.  This is what licenses computing the jet in a
+convenient coordinate, such as arc length in Section~\ref{sec:counterexample},
+rather than in the normal graph chart of \eqref{eq:chart}.
+\end{corollary}
+
+Appendix~\ref{app:finite-proof} identifies $b_{p,q}$ as the sum of a contribution from the next odd density jet and a $q_m$-weighted contraction of the second fundamental form.  For the covariance, the proof localizes and rescales $z=\sigma u$; parity removes the nominal order-$\sigma$ correction, leaving a limit determined by the leading density jet in the chosen tangent frame.  Figure~\ref{fig:tilted-posterior} shows this mechanism.  Positive definiteness follows because a nonzero polynomial cannot concentrate on a hyperplane.  Gaussian integration by parts and Euler's homogeneous-function identity establish \eqref{eq:trace}.
+
+\begin{takeawaybox}[At the zero]
+The projector limit fails in scale, not in range: the limiting link Hessian has rank $k$ and range $\T_p\M$, while $\tr H_\sigma(p)-k\to m$.  The excess trace is exactly the local vanishing order.
+\end{takeawaybox}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.923\linewidth]{figures/tilted-posterior.pdf}
+  \caption{Why the vanishing order survives the small-noise rescaling, drawn in rescaled tangent coordinates with $k=2$.  Shading is the limiting tangent posterior density and the dashed curve is its covariance $C_{q_m}$.  The top row uses isotropic jets $q_m(u)=\|u\|^m$ of increasing order: at a regular point (a) the posterior is standard Gaussian and $C_{q_0}=I$, so $H_\sigma(p)$ tends to the tangent projector, while at the zeros (b) and (c) the jet hollows out the centre and the covariance inflates to $2I$ and $3I$ without changing shape.  The bottom row uses anisotropic jets at the same two orders, $q_2(u)=3u_1^2+u_2^2$ in (d) and the quartic $q_4(u)=u_1^4+0.1\,u_2^4$ of Section~\ref{sec:experiments} in (e), giving $\diag(2.5,1.5)$ and $\diag(4.636,1.364)$.  At matched order the trace is the same, $4$ in both (b) and (d) and $6$ in both (c) and (e), while the shape is not.  The order therefore fixes the trace and the jet fixes the shape, and in every panel the ellipse stays centred and nondegenerate, so the tangent range is retained throughout.  Panels (a) to (e) use equal scales on both axes, so the ellipses carry their true shape.  (f) The trace against the vanishing order for the isotropic family, with the dashed line $k+m$ of \eqref{eq:trace}; the plotted values agree with it exactly.}
+  \label{fig:tilted-posterior}
+\end{figure}
+
+\paragraph{Closed forms.}
+If $q_m(z)=\|z\|^m$ (with even $m$), rotational symmetry and \eqref{eq:trace} give
+\begin{equation}
+  C_{q_m}=\left(1+\frac{m}{k}\right)I_k.
+\end{equation}
+For a quadratic zero $q_2(z)=z^\top A z$, $A\succeq0$ and $A\ne0$, Isserlis' identity gives
+\begin{equation}
+  C_{q_2}=I_k+\frac{2A}{\tr A}.
+  \label{eq:quadratic}
+\end{equation}
+Thus even the limiting tangent metric can be anisotropic.
+
+\subsection{A smooth full-support counterexample}
+\label{sec:counterexample}
+
+Let $\M=S^1$, $x(\theta)=(\cos\theta,\sin\theta)$, $p=(1,0)$, and
+\begin{equation}
+  \rho(\theta)=\frac{1-\cos\theta}{2\pi}.
+  \label{eq:circle-density}
+\end{equation}
+This density is $C^\infty$, nonnegative, and zero only at $p$.  Consequently, $\operatorname{supp}(\mu)=S^1$.  Since $1-\cos\theta=\theta^2/2+O(\theta^4)$, Theorem~\ref{thm:finite} yields, for the tangent vector $t=(0,1)$,
+\begin{equation}
+  H_\sigma(p)\longrightarrow 3tt^\top\ne tt^\top=P_{\T_pS^1}.
+  \label{eq:circle-counter}
+\end{equation}
+Indeed, after $\theta=\sigma u$, the tangent posterior is proportional to $u^2e^{-u^2/2}$ and has variance $\E Z^4/\E Z^2=3$.  Appendix~\ref{app:examples} collects this circle family and the radial and quadratic jets.
+
+At positive-density points, Corollary~\ref{cor:regular} recovers the usual projector limit.  The stated assumptions of Theorem~1 in arXiv v2 (28 February 2026) of \citet{kharitenko2026landing} also permit isolated zeros, because full support is weaker than pointwise positivity.\footnote{That theorem assumes ``$\M\subseteq\R^d$ a compact, embedded $C^3$-submanifold and $\mu\in\mathcal P(\R^d)$ a Borel probability measure with $\operatorname{supp}\mu=\M$ and $\mu\ll\operatorname{Vol}_\M$ such that $\tfrac{d\mu}{d\operatorname{Vol}_\M}\in C^3(\M)$'', and its Corollary~2 concludes $\lim_{\sigma\to0}\,I+\sigma^2\nabla^2\log p_\sigma(x)=P_{\T_x\M}$ for $x\in\M$.  The density \eqref{eq:circle-density} satisfies each of these hypotheses.}  The circle example shows that the conclusion requires a local positivity condition.  The local estimate in their Appendix E.2 carries $\mu(p)$ and $\mu(p)^2$ in denominators, and their Appendix E.4 supplies the missing condition by asserting that ``since $\mu(\cdot)\in C^3(\M)$ and $\operatorname{supp}\mu=\M$, there exist positive lower and upper bounds on $\mu(\cdot)$ and its derivatives on $\M$''.  With this condition, that result covers the positive-density regime, while Theorem~\ref{thm:finite} characterizes the complementary finite-type regime.
+
+\subsection{A density-floor phase transition}
+\label{sec:crossover}
+
+Although a zero is defined pointwise, its effect persists across a noise-dependent low-density regime.  Fix a sufficiently small coordinate neighborhood $U=F_p(B(0,r_0))$.  Let an unnormalized family satisfy, for $z\in B(0,r_0)$ and $0\le\delta\le\delta_0$,
+\begin{equation}
+  a_\delta(z)=q_m(z)+\delta h(z)+r_\delta(z),
+  \qquad h\text{ continuous},\quad h(0)=a_0>0,
+\end{equation}
+where $|r_\delta(z)|\le C(\|z\|^m+\delta)$ on this fixed neighborhood and
+$r_\delta(z)/(\|z\|^m+\delta)\to0$ uniformly in the joint limit
+$(z,\delta)\to(0,0)$.  After fixing the common local normalization, assume that the total unnormalized mass on $\M\setminus U$ is uniformly bounded as $\delta\downarrow0$.  The weaker subexponential condition $\exp(o(\sigma^{-2}))$ along $\delta=\delta_\sigma$ also suffices.  Normalization is immaterial to the posterior.  Let $\delta=\delta_\sigma\downarrow0$ with $\delta_\sigma/\sigma^m\to\lambda\in[0,\infty]$.
+
+\begin{theorem}[Density-floor crossover]
+\label{thm:crossover}
+Under the local assumptions of Theorem~\ref{thm:finite}, the tangent block of $H_\sigma(p)$ converges to
+\begin{equation}
+  C_{q,\lambda}
+  =\frac{a_0\lambda I_k+\E[ZZ^\top q_m(Z)]}
+  {a_0\lambda+\E[q_m(Z)]},
+  \qquad
+  \tr C_{q,\lambda}
+  =k+\frac{m\E[q_m(Z)]}{a_0\lambda+\E[q_m(Z)]}.
+  \label{eq:crossover}
+\end{equation}
+For $\lambda=\infty$, the limit is $I_k$.
+\end{theorem}
+
+Appendix~\ref{app:crossovers} proves the law by rescaling the floor against the
+leading jet.  Thus $\delta\ll\sigma^m$ is zero-dominated, $\delta\gg\sigma^m$ is regular-density, and $\delta\asymp\sigma^m$ interpolates nontrivially.  On the circle with $a_\delta(\theta)=\delta+1-\cos\theta$,
+\begin{equation}
+  \lambda=\delta/\sigma^2,\qquad
+  C_{q,\lambda}=\frac{\lambda+3/2}{\lambda+1/2}.
+  \label{eq:circle-crossover}
+\end{equation}
+
+There is a distinct spatial boundary layer for a \emph{fixed} distribution.  Query the denoiser at the nearby manifold point $y_\sigma=F_p(\sigma a)$, where $a\in\R^k$ is fixed, and let $\nu_{q,a}$ be the probability law with density proportional to
+\begin{equation}
+  q_m(u)\exp\!\left(-\tfrac12\|u-a\|^2\right).
+\end{equation}
+Applying the rescaling from Theorem~\ref{thm:finite} gives the following result.
+
+\begin{proposition}[Spatial boundary layer]
+\label{prop:spatial}
+Under the minimal convergence assumptions of Theorem~\ref{thm:finite},
+\begin{equation}
+  H_\sigma(F_p(\sigma a))
+  \longrightarrow U_p C_q^{\mathrm{sp}}(a)U_p^\top,
+  \qquad
+  C_q^{\mathrm{sp}}(a)=\Cov_{\nu_{q,a}}(u).
+  \label{eq:spatial}
+\end{equation}
+Equivalently, if $M_q(a)=\E[q_m(a+Z)]$, then
+\begin{equation}
+  C_q^{\mathrm{sp}}(a)=I_k+\nabla_a^2\log M_q(a).
+\end{equation}
+For $k=1$ and $q_2(u)=u^2$,
+\begin{equation}
+  C_q^{\mathrm{sp}}(a)=\frac{a^4+3}{(a^2+1)^2}.
+  \label{eq:spatial-quadratic}
+\end{equation}
+It equals $3$ at the zero, crosses $1$ at $|a|=1$, reaches $3/4$ at $|a|=\sqrt3$, and tends back to $1$ from below.
+\end{proposition}
+
+Appendix~\ref{app:crossovers} proves this by the same moving-query rescaling.
+Under the two-order density expansion and third-order graph bound in
+Theorem~\ref{thm:finite}, the same moving-query calculation gives, uniformly for $a$ in compact sets,
+\begin{align}
+  D_\sigma(F_p(\sigma a))-F_p(\sigma a)
+  &=\sigma U_p\bigl(\E_{\nu_{q,a}}u-a\bigr)+O(\sigma^2),
+  \label{eq:spatial-mean-rate}\\
+  H_\sigma(F_p(\sigma a))
+  &=U_pC_q^{\mathrm{sp}}(a)U_p^\top+O(\sigma).
+  \label{eq:spatial-h-rate}
+\end{align}
+The normal component of the first line is $O(\sigma^2)$, and Davis--Kahan applied to the second line gives
+$\|\mathcal P_k(H_\sigma(F_p(\sigma a)))-P_{\T_{F_p(\sigma a)}\M}\|_\op=O(\sigma)$.
+
+The on-manifold calculation extends to normal offsets of the same scale.
+Write $P=U_pU_p^\top$, $P^\perp=I-P$, and set
+\begin{equation}
+  \mathcal B(u)=\tfrac12\mathrm{II}_p[u,u],
+  \qquad
+  \mu_a=\E_{\nu_{q,a}}u,
+  \qquad
+  C_a=\Cov_{\nu_{q,a}}(u).
+\end{equation}
+Also define the normal-valued covariance and its calibrated version by
+\begin{equation}
+  \Gamma_a
+  =\E_{\nu_{q,a}}
+  \bigl[(\mathcal B(u)-\overline{\mathcal B}_a)
+        (u-\mu_a)^\top\bigr],
+  \qquad
+  \Lambda_a=\Gamma_aC_a^{-1},
+  \qquad
+  \overline{\mathcal B}_a=\E_{\nu_{q,a}}\mathcal B(u).
+  \label{eq:normal-boundary-objects}
+\end{equation}
+For $b\in\N_p\M$, let the shape operator $S_b$ and the normal map
+$\mathcal B_a$ be given by
+\begin{equation}
+  \langle S_bv,w\rangle
+  =\langle b,\mathrm{II}_p[v,w]\rangle,
+  \qquad
+  \mathcal B_av=\mathrm{II}_p[a,v].
+  \label{eq:shape-convention}
+\end{equation}
+
+\begin{theorem}[Uniform normal-offset boundary layer]
+\label{thm:normal-boundary}
+Assume the two-order density expansion and third-order graph expansion of
+Theorem~\ref{thm:finite}, including
+$\|DR_g(z)\|_\op\le C\|z\|^2$.  Fix compact sets
+$K_T\subset\R^k$ and $K_N\subset\N_p\M$.  Assume also that, for some fixed chart radius
+$r$, constants $c,C>0$, and all sufficiently small $\sigma$,
+\begin{equation}
+  \sup_{a\in K_T,\,b\in K_N}
+  \int_{\M\setminus F_p(B(0,r))}
+  (1+\|x-p\|^2)
+  e^{-\|x-F_p(\sigma a)-\sigma b\|^2/(2\sigma^2)}\,\mu(dx)
+  \le Ce^{-c/\sigma^2}.
+  \label{eq:normal-boundary-localization}
+\end{equation}
+This localization condition is automatic when a fixed Euclidean
+neighborhood of $p$ meets $\M$ only in the chart; in particular it holds
+for compact $\M$.  For the two statements below that involve nearest-point projection we assume in addition that $\M$ has positive reach and that $\sigma$ is small enough for
+$\mathcal V_\sigma(K_T,K_N)$ to lie within a tubular neighborhood of radius
+smaller than that reach, so $\pi$ is single valued on it; the expansions of
+$D_\sigma$, $H_\sigma$, and $Q_\sigma$ do not use $\pi$.  Let
+\begin{equation}
+  \mathcal V_\sigma(K_T,K_N)
+  =\{F_p(\sigma a)+\sigma b:a\in K_T,\ b\in K_N\}.
+  \label{eq:normal-boundary-set}
+\end{equation}
+Then, uniformly for $a\in K_T$ and $b\in K_N$,
+\begin{align}
+  D_\sigma(y)-y
+  &=\sigma\{U_p(\mu_a-a)-b\}+O(\sigma^2),
+  \label{eq:normal-boundary-mean}\\
+  U_p^\top H_\sigma(y)U_p
+  &=C_a+O(\sigma),\nonumber\\
+  P^\perp H_\sigma(y)U_p
+  &=\sigma\Gamma_a+O(\sigma^2),\qquad
+  P^\perp H_\sigma(y)P^\perp
+  =\sigma^2\Cov_{\nu_{q,a}}(\mathcal B(u))+O(\sigma^3).
+  \label{eq:normal-boundary-blocks}
+\end{align}
+In particular, if $c_0=\inf_{a\in K_T}\lambda_{\min}(C_a)>0$ and
+$Q_\sigma(y)=\mathcal P_k(H_\sigma(y))$, then, for all sufficiently small
+$\sigma$,
+\begin{align}
+  \lambda_k(H_\sigma(y))&\ge c_0-O(\sigma),&
+  \lambda_{k+1}(H_\sigma(y))&=O(\sigma^2),
+  \label{eq:normal-boundary-gap}\\
+  Q_\sigma(y)
+  &=P+\sigma\{\Lambda_aU_p^\top+U_p\Lambda_a^\top\}
+    +O(\sigma^2).
+  \label{eq:normal-boundary-projector}
+\end{align}
+Moreover, nearest projection and population normal-only landing obey
+\begin{align}
+  \pi(y)
+  &=F_p\!\left(\sigma a+\sigma^2S_ba+O(\sigma^3)\right),
+  \label{eq:normal-boundary-projection}\\
+  \overline D_{\sigma,Q_\sigma}(y)-\pi(y)
+  &=\sigma^2\Bigl[
+      U_p\{\Lambda_a^\top b-S_ba\}
+      +\overline{\mathcal B}_a-\mathcal B(a)
+      -\Lambda_a(\mu_a-a)
+    \Bigr]+O(\sigma^3),
+  \label{eq:normal-boundary-landing}
+\end{align}
+where
+$\overline D_{\sigma,Q}(y)=y+(I-Q(y))(D_\sigma(y)-y)$.
+All remainders are uniform on $K_T\times K_N$.
+
+Finally, let
+$W_{F_p(z)}=DF_p(z)(DF_p(z)^\top DF_p(z))^{-1/2}$ and set
+$A_{0,\sigma}(y)=W_{\pi(y)}C_aW_{\pi(y)}^\top$.  Then
+$\range(A_{0,\sigma}(y))=\T_{\pi(y)}\M$ and, on
+$\mathcal V_\sigma(K_T,K_N)$,
+\begin{equation}
+  \beta_H(\sigma)=O(\sigma),\qquad
+  \beta_L(\sigma)=O(\sigma^2),\qquad
+  g_\sigma\ge c_0/2,\qquad
+  \sup_y\|D_\sigma(y)-y\|=O(\sigma),
+  \label{eq:normal-boundary-rates}
+\end{equation}
+in the notation of Corollary~\ref{cor:learned}, where $\beta_H$ is the
+supremum over the query set of $\|H_\sigma-A_{0,\sigma}\|_\op$, that is the
+population bias of the link Hessian against the reference field just defined,
+$\beta_L$ is the corresponding supremum of the normal-only landing error
+$\|\overline D_{\sigma,Q_\sigma}-\pi\|$, and $g_\sigma$ is the infimum of the
+tangent-normal eigengap $\lambda_k(H_\sigma)-\lambda_{k+1}(H_\sigma)$.
+\end{theorem}
+
+Appendix~\ref{app:normal-boundary} proves it.  The theorem concerns a shrinking $O(\sigma)$ tube, the scale needed for the
+uniform population bounds used in local optimization.  On a fixed-width
+tube, Lemma~\ref{lem:landing-decomposition} shows why the same
+$O(\sigma^2)$ landing rate generally fails.
+
+Because $C_{q,\lambda}$ is a scalar convex combination of $C_q$ and $I_k$, each eigenvalue moves monotonically toward one as the floor grows.  The matrix path need not be monotone in Loewner order.  The spatial law need not be eigenvalue-monotone either, because shifting the Gaussian window changes both the posterior mean and variance.  The experiments therefore treat the two mechanisms separately.
+
+\begin{takeawaybox}[Two nearby regimes]
+A positive density floor does not restore regular-density geometry until it is resolved at the noise scale: floors $\delta=o(\sigma^m)$ retain the finite-zero limiting spectrum.  With the density fixed, queries within $O(\sigma)$ of the zero instead follow the spatial boundary-layer law.  The two transitions arise from different perturbations.
+\end{takeawaybox}
+
+\section{Spectral calibration}
+\label{sec:calibration}
+
+Let $A_0=UC_qU^\top$ and $c_q=\lambda_{\min}(C_q)>0$.  Given a symmetric estimate $\widehat A$, define the hard calibration
+\begin{equation}
+  \mathcal{P}_k(\widehat A)
+  :=\text{orthogonal projector onto the top-$k$ eigenspace of }\widehat A.
+  \label{eq:hard}
+\end{equation}
+If $k$ is unknown, it can be selected by thresholding inside the tangent-normal spectral gap under the condition stated below.  For a differentiable score network $s_\theta$, the input is the symmetrized link Jacobian
+\begin{equation}
+  \widehat A_\theta(y)=\tfrac12\bigl(A_\theta(y)+A_\theta(y)^\top\bigr),
+  \qquad A_\theta(y)=I_d+\sigma^2\nabla s_\theta(y).
+\end{equation}
+
+\begin{proposition}[Stable hard calibration]
+\label{prop:hard}
+If $\|\widehat A-A_0\|_\op\le\eta<c_q/2$, then
+\begin{equation}
+  \|\mathcal{P}_k(\widehat A)-UU^\top\|_\op
+  \le \frac{2\eta}{c_q}.
+  \label{eq:hard-bound}
+\end{equation}
+Write $P=UU^\top$ and $P^\perp=I_d-P$, and let $U_\perp$ have orthonormal columns
+spanning $\range(U)^\perp$, so that its columns form a basis of the normal
+space.  Set
+\begin{equation}
+  \delta(\widehat A)
+  :=\lambda_{\min}\bigl(U^\top\widehat AU\bigr)
+   -\lambda_{\max}\bigl(U_\perp^\top\widehat AU_\perp\bigr).
+  \label{eq:computed-separation}
+\end{equation}
+Whenever $\delta(\widehat A)>0$, without any hypothesis on $\eta$,
+\begin{equation}
+  \|\mathcal{P}_k(\widehat A)-UU^\top\|_\op
+  \le\frac{\|P^\perp\widehat AP\|_\op}{\delta(\widehat A)},
+  \label{eq:hard-residual}
+\end{equation}
+in which only the tangent-normal coupling block of the error appears: since
+$P^\perp A_0P=0$, we have $P^\perp\widehat AP=P^\perp(\widehat A-A_0)P$.  In
+particular an error confined to the tangent block leaves
+$\mathcal P_k(\widehat A)=UU^\top$ exactly, however large its eigenvalue bias.
+Under the standing hypothesis $\eta<c_q/2$, Weyl's inequality gives
+$\delta(\widehat A)\ge c_q-2\eta>0$, so \eqref{eq:hard-residual} is then
+available with a denominator depending only on $c_q$ and $\eta$.  Both blocks in
+\eqref{eq:computed-separation} are computable from $\widehat A$ and a tangent
+frame, so \eqref{eq:hard-residual} remains informative in regimes where
+$\eta<c_q/2$ fails.
+For every threshold $\vartheta_{\mathrm{sp}}\in(\eta,c_q-\eta)$,
+$\mathbf 1_{(\vartheta_{\mathrm{sp}},\infty)}(\widehat A)$ has rank $k$ and equals
+$\mathcal P_k(\widehat A)$; thus the same condition gives unknown-$k$ rank recovery.
+In addition,
+\begin{equation}
+  \left|\sum_{i=1}^k\lambda_i(\widehat A)-(k+m)\right|\le k\eta;
+\end{equation}
+hence $m=\operatorname{round}(\sum_{i=1}^k\lambda_i(\widehat A)-k)$ whenever $k\eta<1/2$.
+\end{proposition}
+
+A soft alternative is obtained after projecting $\widehat A$ onto the positive-semidefinite cone:
+\begin{equation}
+  \Phi_\tau(\widehat A_+)=\widehat A_+(\widehat A_++\tau I)^{-1}.
+  \label{eq:soft}
+\end{equation}
+
+\begin{proposition}[Stable soft calibration]
+\label{prop:soft}
+If $\widehat A\succeq0$ and $\|\widehat A-A_0\|_\op\le\eta$, then for every $\tau>0$,
+\begin{equation}
+  \|\Phi_\tau(\widehat A)-UU^\top\|_\op
+  \le \frac{\tau}{c_q}+\frac{\eta}{\tau}.
+  \label{eq:soft-bound}
+\end{equation}
+Balancing the two terms gives an $O(\sqrt{\eta/c_q})$ error without forming a hard top-$k$ eigenspace.
+\end{proposition}
+
+Appendix~\ref{app:spectral} proves the hard bound with Davis--Kahan and the soft bound with the resolvent identity.  If the estimator is PSD by construction, the rational filter avoids a hard eigenspace cutoff.  A general symmetric score Jacobian may still require an eigendecomposition to form $\widehat A_+$.  The estimate $\|\widehat A-A_0\|_\op\le\eta$ yields $\|\widehat A_+-A_0\|_\op\le2\eta$, so for a symmetric estimate that is not positive semidefinite the composed form of Proposition~\ref{prop:soft} reads $\|\Phi_\tau(\widehat A_+)-UU^\top\|_\op\le\tau/c_q+2\eta/\tau$, which balances at $2\sqrt{2\eta/c_q}$.  The raw operator $A_0$ remains a positive-definite preconditioner on the tangent space and therefore preserves first-order stationary points.  Calibration removes density-dependent conditioning and gives the step size the same interpretation as in Riemannian gradient descent.  The optimization results below use the hard rank-$k$ orthogonal projector.  We evaluate the soft contraction in \eqref{eq:soft} only as a geometric estimator.  The experiments assume known $k$, apart from a separately reported threshold-at-$1/2$ rank diagnostic.  The present guarantees do not cover adaptive threshold selection.  That diagnostic is licensed only when $c_q>1/2+\eta$, and $c_q$ is not bounded below by $1/2$ uniformly in the vanishing order.  For $k=2$, minimizing $\lambda_{\min}(C_q)$ numerically over the nonnegative binary forms $q(z)=\prod_j(z_1-t_jz_2)^2$ gives $0.879$, $0.670$, $0.534$, $0.442$, $0.380$, and $0.333$ at orders $m=4,8,12,16,20,24$.  The diagnostic is therefore sound at the orders used in Section~\ref{sec:experiments} but fails for deep zeros: at $m=16$ a threshold of $1/2$ discards a genuine tangent direction even when the operator is exact.  Lemma~\ref{lem:universal-gap} guarantees a positive constant depending on $k$ and $m$, not a constant exceeding $1/2$.
+
+\section{Density-calibrated optimization}
+\label{sec:optimization}
+
+Calibrating only the gradient multiplier is insufficient if a raw denoiser is subsequently used as the landing map.  We avoid the word retraction for $\overline D_Q$, which does not map into $\M$ and does not fix manifold points at positive $\sigma$, so it is not a retraction in the sense of \citet{absil2008optimization}; the analysis never uses those axioms, only the landing error in \eqref{eq:oracle-errors}.  At a symmetric finite-type center,
+$D_\sigma(p)=p+O(\sigma^2)$ and $H_\sigma(p)\to U C_qU^\top$.  For a locally isotropic quadratic objective centered at $p$, the tangent linearization of
+\begin{equation}
+  x\longmapsto D_\sigma\!\left(x-\gamma H_\sigma(x)\nabla f(x)\right)
+  \label{eq:raw-drgd}
+\end{equation}
+converges to $C_q(I-\gamma C_q)$.  Replacing the inner $H_\sigma$ by $P_{\T_p\M}$ still leaves the limiting factor $C_q(I-\gamma I)$: the outer denoiser reintroduces density-dependent expansion.
+
+Normal-only landing avoids this effect.  Given $Q(y)$, define
+\begin{equation}
+  \overline D_Q(y):=y+(I-Q(y))(D(y)-y).
+  \label{eq:normal-landing}
+\end{equation}
+For the population denoiser of a distribution supported on an affine manifold, exact $Q=P_{\T_p\M}$ makes this map the exact orthogonal projection for every $\sigma$ and leaves tangent coordinates unchanged.  On a curved manifold, it is an inexact landing map.  The next result treats that error abstractly.  Throughout this section, $\M$ is compact, $C^3$, and has positive reach, and $\pi$ denotes nearest-point projection in a reach tube $\mathcal{T}_r=\{x:\dist(x,\M)<r\}$.
+
+The spatial law quantifies the difference.  For a one-dimensional quadratic zero and $y_\sigma=F_p(\sigma a)$,
+\begin{equation}
+  D_\sigma(y_\sigma)-y_\sigma
+  =\sigma U_p\frac{2a}{a^2+1}+O(\sigma^2).
+  \label{eq:tangent-drift}
+\end{equation}
+Thus raw denoising has an $O(\sigma)$ tangent drift throughout the boundary layer, pointing away from the zero.  Exact normal-only landing removes that term and leaves an $O(\sigma^2)$ curvature residual.
+
+\begin{lemma}[Normal-only landing decomposition]
+\label{lem:landing-decomposition}
+Let $p=\pi(y)$, $v=y-p\in\N_p\M$, $r_D=D(y)-p$, and let $Q(y)$ be an orthogonal projector satisfying
+$\|Q(y)-P_{\T_p\M}\|_\op\le\eps_P$.  Then
+\begin{equation}
+  \overline D_Q(y)-p=Q(y)v+(I-Q(y))r_D,
+  \label{eq:landing-decomposition}
+\end{equation}
+and therefore
+\begin{equation}
+  \|\overline D_Q(y)-\pi(y)\|
+  \le \eps_P\dist(y,\M)
+  +\eps_P\|P_{\T_p\M}r_D\|
+  +\|(I-P_{\T_p\M})r_D\|.
+  \label{eq:landing-decomposition-bound}
+\end{equation}
+\end{lemma}
+
+The first term cannot be omitted.  Under the stronger moving-query expansion \eqref{eq:spatial-mean-rate}--\eqref{eq:spatial-h-rate}, an on-manifold spatial boundary layer has $\eps_P=O(\sigma)$, an $O(\sigma)$ tangent component of $r_D$, and an $O(\sigma^2)$ normal component.  Equation~\eqref{eq:landing-decomposition-bound} then gives an $O(\sigma^2)$ error.  On a fixed-width tube, the same bound permits only an $O(\sigma)$ guarantee because projector tilt can act on an $O(1)$ normal displacement.  Appendix~\ref{app:optimization} proves the lemma and details this distinction.
+
+\begin{assumption}[Inexact normal landing and tangent oracles]
+\label{ass:oracles}
+Let $\mathcal V\subseteq\mathcal{T}_r$ be a set containing every iterate $x_t$ and every intermediate point $z_t$ of the recursion below.  On $\mathcal V$, a landing map $L$ and rank-$k$ orthogonal projector $Q$ satisfy
+\begin{equation}
+  \|L(z)-\pi(z)\|\le\eps_L,
+  \qquad
+  \|Q(x)-P_{\T_{\pi(x)}\M}\|_\op\le\eps_P.
+  \label{eq:oracle-errors}
+\end{equation}
+The intended construction is $L=\overline D_Q$ from \eqref{eq:normal-landing}; the theorem also applies to an independently learned landing map satisfying the displayed error.  We state the hypothesis on $\mathcal V$ rather than on all of $\mathcal T_r$ because the proof invokes these inequalities only at the visited points, and because the rates available from Theorem~\ref{thm:normal-boundary} are established on an $O(\sigma)$ layer rather than on a tube of fixed width.  Taking $\mathcal V=\mathcal T_r$ is admissible whenever uniform bounds of this form are available there.
+\end{assumption}
+
+For an ambient differentiable objective $f$, define spectrally calibrated denoising Riemannian gradient descent (SC-DRGD):
+\begin{equation}
+  z_t=x_t-\gamma Q(x_t)\nabla f(x_t),
+  \qquad x_{t+1}=L(z_t).
+  \label{eq:scdrgd}
+\end{equation}
+In practice $D=D_\theta$, $Q=\mathcal{P}_k(\widehat A_\theta)$, and $L=\overline D_{\theta,Q}$.  Evaluation-point and estimation differences are absorbed into \eqref{eq:oracle-errors}.
+
+\begin{theorem}[Inexact SC-DRGD]
+\label{thm:optimization}
+Suppose $f$ has $L_f$-Lipschitz gradient and $\|\nabla f\|\le B$ on $\mathcal{T}_r$.  Let $F=f\circ\pi$ have $L_F$-Lipschitz gradient there, let $\pi$ be $L_\pi$-Lipschitz, and assume
+\begin{equation}
+  \|\mathrm d\pi_x-P_{\T_{\pi(x)}\M}\|_\op
+  \le K_\pi\dist(x,\M).
+\end{equation}
+Let $L$ and $Q$ satisfy Assumption~\ref{ass:oracles} on a set $\mathcal V$ containing every $x_t$ and $z_t$.  Initialize $\dist(x_0,\M)\le\eps_L$, which one landing step from any $x_{-1}\in\mathcal T_{r-\gamma B}$ achieves.  If
+\begin{equation}
+  \gamma B+\eps_L<r,
+  \qquad L_\pi\eps_L<r,
+  \qquad 0<\gamma\le(4L_F)^{-1},
+\end{equation}
+then every $x_t$ is $\eps_L$-feasible and, with
+\begin{equation}
+  e=(K_\pi B+L_f)\eps_L+B\eps_P,
+  \label{eq:eopt}
+\end{equation}
+we have for $p_t=\pi(x_t)$
+\begin{equation}
+  \frac1N\sum_{t=0}^{N-1}\|\grad_\M f(p_t)\|^2
+  \le
+  \frac{4(F(x_0)-\inf_\M f)}{\gamma N}
+  +9e^2+\frac{4BL_\pi\eps_L}{\gamma}.
+  \label{eq:opt-bound}
+\end{equation}
+\end{theorem}
+
+The term $4BL_\pi\eps_L/\gamma$ in \eqref{eq:opt-bound} is the accumulated objective drift caused by landing error at successive iterations.  The tangent-projector error appears through the quadratic term $e^2$.  Appendix~\ref{app:optimization} gives the perturbed descent argument for $F=f\circ\pi$.
+
+\begin{corollary}[Learned-score reduction to population biases]
+\label{cor:learned}
+Let $\mathcal V\subset\mathcal T_r$ contain every tangent-step query $x_t$ and landing query $z_t$ of the run under consideration.  For each $y\in\mathcal V$, suppose a PSD rank-$k$ field $A_{0,\sigma}(y)$ satisfies
+\begin{equation}
+  \range(A_{0,\sigma}(y))=\T_{\pi(y)}\M,
+  \qquad \lambda_k(A_{0,\sigma}(y))\ge c>0.
+\end{equation}
+Define $Q_\sigma=\mathcal P_k(H_\sigma)$ and the population quantities
+\begin{align}
+  \beta_H(\sigma)&=\sup_{y\in\mathcal V}
+  \|H_\sigma(y)-A_{0,\sigma}(y)\|_\op,\\
+  \beta_L(\sigma)&=\sup_{y\in\mathcal V}
+  \|\overline D_{\sigma,Q_\sigma}(y)-\pi(y)\|,\\
+  g_\sigma&=\inf_{y\in\mathcal V}
+  \{\lambda_k(H_\sigma(y))-\lambda_{k+1}(H_\sigma(y))\}.
+\end{align}
+Assume $g_\sigma>0$, $\sup_{\mathcal V}\|D_\sigma(y)-y\|\le R_D$, and a learned score satisfies uniformly on $\mathcal V$
+\begin{equation}
+  \|s_\theta-s_\sigma\|\le\eps_s,
+  \qquad
+  \|\nabla s_\theta-\nabla s_\sigma\|_\op\le\eps_J.
+\end{equation}
+Set $D_\theta(y)=y+\sigma^2s_\theta(y)$,
+$\widehat A_\theta=\operatorname{sym}(I+\sigma^2\nabla s_\theta)$, and $Q_\theta=\mathcal P_k(\widehat A_\theta)$.  If
+\begin{equation}
+  \beta_H(\sigma)+\sigma^2\eps_J<c/2,
+  \qquad \sigma^2\eps_J<g_\sigma/2,
+\end{equation}
+then the two oracle inequalities in \eqref{eq:oracle-errors} hold on $\mathcal V$ for the learned normal-only landing and projector, with
+\begin{align}
+  \eps_P&\le \frac{2(\beta_H(\sigma)+\sigma^2\eps_J)}{c},\label{eq:learned-projector}\\
+  \eps_L&\le\beta_L(\sigma)+\sigma^2\eps_s
+  +\frac{2R_D\sigma^2\eps_J}{g_\sigma}.
+  \label{eq:learned-landing-main}
+\end{align}
+\end{corollary}
+
+Appendix~\ref{app:optimization} derives both oracle errors from the uniform score
+bounds.  Provided $\mathcal V$ contains every $x_t$ and $z_t$ used in the descent proof, Corollary~\ref{cor:learned} supplies the two oracle bounds required by Theorem~\ref{thm:optimization}; that theorem's remaining hypotheses are unchanged.  Evaluated at the finite-type center alone, with
+$A_{0,\sigma}=U_pC_{q_m}U_p^\top$, Theorem~\ref{thm:finite} gives
+$\beta_H=O(\sigma^2)$; this is a pointwise consistency check rather than a
+visited set, since a nonstationary run does not remain at $p$.
+Theorem~\ref{thm:normal-boundary} supplies
+$\beta_H=O(\sigma)$, $\beta_L=O(\sigma^2)$, and $g_\sigma=\Omega(1)$
+uniformly on an $O(\sigma)$ boundary layer.  If
+$\eps_s,\eps_J=O(1)$ and $\gamma$ is fixed independently of $\sigma$, then
+$\eps_P=O(\sigma)$ and $\eps_L=O(\sigma^2)$, and after the
+$O((\gamma N)^{-1})$ transient in \eqref{eq:opt-bound} the residual bound on
+the averaged squared stationarity measure is $O(\sigma^2)$.
+
+This last instantiation carries a consistency requirement that we state
+explicitly.  One step of Theorem~\ref{thm:optimization} moves $x_t$ by
+$\gamma\|h_t\|$, which is $\Theta(\gamma)$ wherever $\|\nabla f\|$ is bounded
+away from zero, whereas the layer of Theorem~\ref{thm:normal-boundary} has
+ambient radius $O(\sigma)$.  For a $\sigma$-independent step size the visited
+set therefore stays inside that layer only when the run is already ambient-near-stationary, $\|\nabla f(x_t)\|=O(\sigma/\gamma)$ throughout;
+Corollary~\ref{cor:local-invariant} establishes precisely that configuration and
+gives a stronger conclusion there.  Away from it, Theorem~\ref{thm:optimization}
+remains valid with whatever $\beta_H$, $\beta_L$, and $g_\sigma$ hold uniformly
+on the actual visited set.  Obtaining these on a macroscopic region requires a
+positive density lower bound away from the zero, in the manner of the
+positive-density analyses cited in Section~\ref{sec:related}; we do not prove
+such a uniform statement here.  On a fixed-width
+tube, Lemma~\ref{lem:landing-decomposition} permits only
+$\eps_L=O(\sigma)$ in general, and hence only an $O(\sigma)$ residual for fixed
+$\gamma$.  Statistical guarantees converting an $L^2$ denoising loss into
+the local uniform errors above remain open.
+
+\begin{corollary}[Local invariant SC-DRGD basin]
+\label{cor:local-invariant}
+Assume Theorem~\ref{thm:normal-boundary} on
+\begin{equation}
+  \mathcal V_\sigma^+
+  =\mathcal V_\sigma
+  \bigl(\overline B(0,R_+),
+        \{b\in\N_p\M:\|b\|\le B_+\}\bigr)
+  \label{eq:local-query-set}
+\end{equation}
+for fixed $R_+,B_+>0$.  Let $f$ be $C^3$ near $p$ and suppose
+\begin{equation}
+  \nabla f(p)=0,\qquad
+  G_f=U_p^\top\nabla^2f(p)U_p\succ0.
+  \label{eq:local-objective}
+\end{equation}
+Fix a \emph{$\sigma$-independent} step size $\gamma$ such that
+\begin{equation}
+  \rho=\|I_k-\gamma G_f\|_\op<1;
+  \qquad\text{equivalently,}\qquad
+  0<\gamma<2/\lambda_{\max}(G_f).
+  \label{eq:local-contraction}
+\end{equation}
+Let $\widehat D_\sigma$ and symmetric $\widehat H_\sigma$ be defined on
+$\mathcal V_\sigma^+$ and satisfy
+\begin{align}
+  \delta_D(\sigma)
+  &=\sup_{\mathcal V_\sigma^+}
+    \|\widehat D_\sigma-D_\sigma\|,\nonumber\\
+  \delta_H(\sigma)
+  &=\sup_{\mathcal V_\sigma^+}
+    \|\widehat H_\sigma-H_\sigma\|_\op,\qquad
+  \omega_\sigma
+  =\sigma+\delta_H(\sigma)+\frac{\delta_D(\sigma)}{\sigma}
+  \longrightarrow0.
+  \label{eq:local-errors}
+\end{align}
+Define
+\begin{equation}
+  \widehat Q_\sigma=\mathcal P_k(\widehat H_\sigma),
+  \qquad
+  \widehat L_\sigma(y)
+  =y+(I-\widehat Q_\sigma(y))
+       (\widehat D_\sigma(y)-y).
+  \label{eq:local-learned-oracles}
+\end{equation}
+Choose $0<R_0<R<R_+$ and initialize
+\begin{equation}
+  x_0=F_p(\sigma a_0)+\sigma b_0,\qquad
+  \|a_0\|\le R_0,\qquad
+  \|b_0\|\le M_0\omega_\sigma
+  \label{eq:local-initialization}
+\end{equation}
+for fixed $M_0$.  Then, for all sufficiently small $\sigma$, the iterates
+\begin{equation}
+  z_t=x_t-\gamma\widehat Q_\sigma(x_t)\nabla f(x_t),
+  \qquad
+  x_{t+1}=\widehat L_\sigma(z_t)
+  \label{eq:local-scdrgd}
+\end{equation}
+remain in $\mathcal V_\sigma^+$ for every $t$.  They have unique
+fixed-chart coordinates
+$x_t=F_p(\sigma a_t)+\sigma b_t$, $b_t\in\N_p\M$, satisfying, for
+constants $C,M$ independent of $t$ and $\sigma$,
+\begin{align}
+  a_{t+1}
+  &=(I_k-\gamma G_f)a_t+e_t,
+  &\|e_t\|&\le C\omega_\sigma,
+  \label{eq:local-recurrence}\\
+  \|a_t\|
+  &\le\rho^t\|a_0\|
+    +\frac{C}{1-\rho}\omega_\sigma,
+  &\|b_t\|&\le M\omega_\sigma.
+  \label{eq:local-coordinate-bounds}
+\end{align}
+In particular, with $p_t=\pi(x_t)$,
+\begin{align}
+  \dist(x_t,\M)
+  &\le C\sigma\omega_\sigma,\label{eq:local-feasibility}\\
+  \|x_t-p\|+\|\grad_\M f(p_t)\|
+  &\le
+  C\sigma\left(
+    \rho^t\|a_0\|+\frac{\omega_\sigma}{1-\rho}
+  \right).
+  \label{eq:local-stationarity}
+\end{align}
+\end{corollary}
+
+Appendix~\ref{app:local-invariant} proves the basin is invariant.  For population
+oracles, $\omega_\sigma=\sigma$, so the asymptotic
+feasibility and stationarity floors are $O(\sigma^2)$.  If
+$\widehat D_\sigma=y+\sigma^2s_\theta$ and
+$\widehat H_\sigma=\operatorname{sym}(I+\sigma^2\nabla s_\theta)$, then
+$\delta_D\le\sigma^2\eps_s$ and $\delta_H\le\sigma^2\eps_J$.  Bounded
+$\eps_s,\eps_J$ preserve the same $O(\sigma^2)$ floors.  The conclusion is local.  Appendix~\ref{app:normal-gradient-caveat} explains why that hypothesis is needed.  It establishes the visited-set condition near an ambient stationary point with positive-definite tangent Hessian, but does not show that an arbitrary trajectory enters or remains in a finite-type boundary layer.
+
+\begin{takeawaybox}[Both steps matter]
+Calibrating the tangent update alone does not remove density-dependent scaling from the full update.  Normal-only landing removes the raw denoiser's tangent displacement; without it, the outer derivative restores the scaling removed from the inner step.
+\end{takeawaybox}
+
+\section{Population, finite-sample, and learned-score evidence}
+\label{sec:experiments}
+
+The experiments separate population, finite-sample, and learned-model effects.  Deterministic quadrature evaluates population posterior moments, empirical posterior estimation adds finite-sample error, and the learned-model studies add model and Jacobian error, first in geometric estimation and then inside an optimizer.  Appendix~\ref{app:experiments} records the protocol, seeds and numerical self-checks.
+
+\subsection{Spectral law on the circle}
+
+We begin with deterministic quadrature, which removes sampling and learning error.  For $r\in\{0,1,2,4\}$, let $\rho_r(\theta)\propto(1-\cos\theta)^r$ and evaluate $H_\sigma(p)$ at $p=(1,0)$.  Here the vanishing order is $m=2r$, so Theorem~\ref{thm:finite} predicts tangent eigenvalue $1+2r$ and normal eigenvalue zero.  Figure~\ref{fig:circle-spectrum} approaches $1,3,5,$ and $9$ without fitted constants.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.821\linewidth]{figures/circle-spectrum.pdf}
+  \caption{Population posterior-covariance spectra on $S^1$, computed by deterministic quadrature.  Solid curves are tangent eigenvalues for density zeros of order $m=2r$; dashed curves show representative normal eigenvalues.  The small-noise limits are the theorem's $k+m=1+2r$.  The horizontal axis is the noise scale on a logarithmic scale, and the vertical axis is the normalized covariance eigenvalue.}
+  \label{fig:circle-spectrum}
+\end{figure}
+
+\subsection{Finite-sample range and order recovery}
+
+We draw samples from the same quadratic-zero circle and form the exact empirical Gaussian-KDE posterior
+\begin{equation}
+  \widehat D_N=\frac{\sum_iw_iX_i}{\sum_iw_i},
+  \qquad
+  \widehat H_N=
+  \frac{\sum_iw_i(X_i-\widehat D_N)(X_i-\widehat D_N)^\top}
+  {\sigma^2\sum_iw_i},
+  \quad
+  w_i=e^{-\|X_i-p\|^2/(2\sigma^2)}.
+  \label{eq:empirical-kde}
+\end{equation}
+Population asymptotics do not indicate how estimation quality changes with realized local sample coverage.  Figure~\ref{fig:kde} addresses this question with $48$ independently seeded replications, $N\in\{20{,}000,80{,}000,320{,}000\}$, and five fixed noise levels.  In panel (a), both $\widehat H_N$ and its top-one projector are compared with finite-noise population references from deterministic quadrature, so deterministic finite-$\sigma$ bias is not counted as sampling error.  The horizontal coordinate is the realized effective sample size $(\sum_iw_i)^2/\sum_iw_i^2$.  Panel (b) asks a harder question: how often does $\operatorname{round}(\lambda_1(\widehat H_N)-1)$ recover the true order $m=2$?  In this symmetric one-dimensional setting, the projector is already accurate at low effective sample size, whereas rounded-order recovery improves only with greater local coverage.  We report this as a descriptive sweep, not as a concentration result.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/finite-sample-kde.pdf}
+  \caption{Finite-sample empirical-posterior experiment.  Each point summarizes $48$ replications.  Color denotes $\sigma$, while circles, triangles, and diamonds denote $N=20\mathrm{k},80\mathrm{k},320\mathrm{k}$.  (a) Filled points and bars are medians and interquartile ranges of $\|\widehat H_N-H_\sigma\|_\op$; open points are median top-one projector errors, both relative to finite-noise population references computed by deterministic quadrature.  (b) Fraction recovering $m=2$ after rounding $\lambda_1(\widehat H_N)-1$, with Wilson $95\%$ binomial intervals.  Both panels use a logarithmic horizontal axis giving the effective sample size; the left vertical axis is the finite-sample operator-norm error on a logarithmic scale, and the right vertical axis is the fraction of replications recovering the rounded order, on a linear scale.}
+  \label{fig:kde}
+\end{figure}
+
+\subsection{Near-zero crossover}
+
+With $\rho_\delta(\theta)\propto\delta+1-\cos\theta$, Figure~\ref{fig:crossover} plots the tangent eigenvalue against $\delta/\sigma^2$.  Results from four noise levels collapse onto the parameter-free prediction \eqref{eq:circle-crossover}.  The experiment shows when a strictly positive density floor changes the score geometry at the current noise scale: the curves are organized by whether $\rho(p)$ is resolved at that scale, not by the binary distinction $\rho(p)=0$ versus $\rho(p)>0$.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.821\linewidth]{figures/crossover.pdf}
+  \caption{Density-floor crossover.  Deterministic quadrature at four noise levels collapses onto $(\lambda+3/2)/(\lambda+1/2)$, interpolating between the finite-zero value $3$ and regular-density value $1$.  The horizontal axis is the density floor divided by $\sigma^2$ on a logarithmic scale, and the vertical axis is the tangent eigenvalue.}
+  \label{fig:crossover}
+\end{figure}
+
+\subsection{Spatial boundary layer}
+
+To separate query displacement from the density-floor effect, we now hold the distribution fixed at $\rho(\theta)\propto1-\cos\theta$ and query at angle $\theta_\sigma=\sigma a$ from its zero.  The tangent-normal cross block need not vanish at finite $\sigma$, so Figure~\ref{fig:spatial} reports the tangent block rather than labeling it an exact eigenvalue.  It converges to the limit of Proposition~\ref{prop:spatial}, recorded in \eqref{eq:spatial-quadratic}, but not monotonically: the quotient can fall below the regular value $1$ before returning to it.  This behavior comes from moving the Gaussian window through one distribution, rather than changing the distribution through a density floor.  Both this experiment and the landing measurement below query on the manifold.  Theorem~\ref{thm:normal-boundary} also covers queries displaced along the normal, and Table~\ref{tab:normal-offset} checks that case separately: the tangent block is $C_a+O(\sigma)$ with a limit independent of the normal coordinate, while the landing bias is $O(\sigma^2)$ with a limit that depends on it.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.821\linewidth]{figures/spatial-boundary-layer.pdf}
+  \caption{Spatial boundary layer around a fixed quadratic zero.  Population circle tangent Rayleigh quotients computed by deterministic quadrature at four noise levels converge to $(a^4+3)/(a^2+1)^2$.  The nonmonotone undershoot is distinct from the monotone density-floor crossover in Figure~\ref{fig:crossover}.  The horizontal axis is the query distance from the zero divided by the noise, and the vertical axis is the tangent Rayleigh quotient; both are linear.}
+  \label{fig:spatial}
+\end{figure}
+
+\subsection{Raw versus normal-only landing}
+
+In the same fixed-distribution boundary layer, Figure~\ref{fig:landing-error} measures the denoiser's value error.  After division by $\sigma$, its raw tangent component converges to $2a/(a^2+1)$, which rules out a uniform $O(\sigma^2)$ retraction approximation there.  Projecting the denoising displacement into the normal space removes that entire tangent term; the remaining error collapses after division by $\sigma^2$.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/landing-error.pdf}
+  \caption{Effect of normal-only landing.  Left: the raw denoiser has an $O(\sigma)$ tangent drift in the spatial boundary layer.  Right: exact normal-only landing removes it and leaves an $O(\sigma^2)$ normal curvature residual.  Both panels use a linear horizontal axis giving the offset divided by the noise; the vertical axes are the tangent error divided by $\sigma$ on the left and the normal residual divided by $\sigma^2$ on the right, which are the normalizations that make the curves collapse.}
+  \label{fig:landing-error}
+\end{figure}
+
+\subsection{Exact local stability, with method-specific step sizes}
+\label{sec:stability}
+
+For even $m\ge0$, choose the realizable jet $q_m(z)=z_1^m$ in $k=2$, so that $C_q=\diag(m+1,1)$, and take $f(z)=\|z\|^2/2$.  Raw inner stepping followed by raw denoising has linearization $C_q(I-\gamma C_q)$.  Calibrating only the inner step gives $C_q(I-\gamma I)$; raw additive preconditioning gives $I-\gamma C_q$; calibrating both the tangent step and normal-only landing gives $I-\gamma I$.  Figure~\ref{fig:conditioning} places their spectral radii on their own step-size ranges.  The last map has the density-independent stable interval $(0,2)$.  By comparison, the raw inner-and-outer interval has width $2/(m+1)^2$, and the inner-only and raw-additive intervals each have width $2/(m+1)$.  All three baselines can be stabilized by tuning, but their admissible intervals contract as the vanishing order grows.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/conditioning.pdf}
+  \caption{Exact local linear stability.  (a) Spectral radius versus method-specific step size for $C_q=\diag(9,1)$; values below $0.03$ are shown at the display floor, and the dashed horizontal line marks stability radius one.  (b) Width of the exact stable step-size interval as the vanishing order increases.  The inner-only and raw-additive widths coincide, although their intervals have different locations.  In (a) the horizontal axis is the step size and the vertical axis is the spectral radius on a logarithmic scale; in (b) the horizontal axis is the vanishing order and the vertical axis is the interval width, also logarithmic.}
+  \label{fig:conditioning}
+\end{figure}
+
+\subsection{Learned circle geometry}
+
+Quadrature leaves open whether a learned Jacobian preserves the same separation between spectral range and scale.  We train a two-hidden-layer noise-conditional residual MLP by denoising regression at three noise levels and compute $\widehat H_\theta=\operatorname{sym}(\nabla D_\theta)$ from its analytic input Jacobian.  Both the uniform circle and the quadratic-zero circle use $12$ independent seeds.  Figure~\ref{fig:learned-circle} shows biased eigenvalues, most visibly at the smallest noise where local coverage is hardest, alongside an accurate top eigenspace.  The contrast is quantitative at the quadratic zero with $\sigma=0.12$: replacing raw $\widehat H_\theta$ by its hard top-one projector improves the median operator error by $1.483$, with paired percentile-bootstrap interval $[1.443,1.528]$, and improves all $12$ seeds; a two-sided sign test over the seeds gives $p=2^{-11}\approx4.9\times10^{-4}$, which we regard as the primary evidence here, since a percentile bootstrap for a median with $12$ replications is coarse and its interval largely reflects seed spread.  On this benchmark, tangent-range recovery is more accurate than eigenvalue recovery.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/learned-geometry.pdf}
+  \caption{Twelve independently trained models per circle density ($24$ total); curves show medians and shaded bands show interquartile ranges.  (a) Largest learned-link eigenvalue for positive density and for a quadratic zero; solid curves are the learned medians and dashed curves the population values computed by deterministic quadrature.  (b) Four operator-norm errors at the zero: the raw link against the tangent projector, the hard-calibrated range error, the learned link against the finite-noise population link, and the tangent-normal coupling block $\|P^\perp\widehat A_\theta P\|_\op$ that replaces the full error in the residual bound~\eqref{eq:hard-residual}.  The learned spectrum is biased, while hard calibration gives substantially smaller operator error for the tangent range.  In both panels the horizontal axis is the training noise level; the vertical axis is the tangent eigenvalue in (a) and the operator-norm error on a logarithmic scale in (b).}
+  \label{fig:learned-circle}
+\end{figure}
+
+\subsection{Rotated anisotropic finite-type plane}
+
+The circle has $k=1,d=2$, so it cannot show whether calibration survives multiple tangent directions, anisotropy, and a larger ambient space.  We therefore use a fixed random orthonormal frame $U\in\R^{16\times2}$ and latent density
+\begin{equation}
+  \rho(z)\propto\bigl(z_1^4+0.1z_2^4\bigr)
+  \exp\!\left(-\frac{\|z\|^2}{2(0.35)^2}\right),
+  \qquad X=Uz.
+  \label{eq:learned-plane-density}
+\end{equation}
+The resulting order-four zero has unequal population tangent eigenvalues and a nonzero tangent-normal eigengap.  Over the same $12$ seeds, Figure~\ref{fig:learned-plane} and Table~\ref{tab:learned-midscale} report both learned-link eigenvalues and projector error, keeping eigenvalue scale separate from tangent alignment.  At $\sigma=0.18$, hard top-two calibration lowers the median projector error from $1.314$ to $0.016$.  The paired median improvement is $1.301$, with bootstrap interval $[1.266,1.603]$, and every seed improves, again $p=2^{-11}$ by the sign test.  The fixed soft filter with $\tau=0.25$ reduces raw scaling error, but it is not an orthogonal projector.
+
+Table~\ref{tab:calibration-regime} identifies which guarantee is actually in force.  At this noise level the learned link is $\eta=1.355$ from the population link in operator norm, against a threshold $c_q/2=0.539$, so the hypothesis of Proposition~\ref{prop:hard} fails by a factor of about $2.5$ and the bound \eqref{eq:hard-bound} is vacuous; the two circle settings satisfy it.  The accuracy observed on the plane is therefore not an instance of that bound.  It is explained by the residual form \eqref{eq:hard-residual}: the tangent-normal coupling block measures only $\|P^\perp\widehat A_\theta P\|_\op=0.0374$, a factor of $36$ below the full operator-norm error, and the computed separation $\delta(\widehat A_\theta)=0.840$ stays positive, so \eqref{eq:hard-residual} certifies $0.0422$ against an observed $0.0160$.  The learned error at a finite-type zero is thus concentrated in eigenvalue scale rather than in the eigenvectors, which is exactly the structure the operator-norm bound cannot exploit and the residual bound can.  On the two circles the residual bound is attained to three decimal places.
+
+The population spectrum at these noise levels is itself pre-asymptotic, which bounds what this experiment can test.  Because the latent density in \eqref{eq:learned-plane-density} is a degree-four tilt of an isotropic Gaussian envelope of scale $s=0.35$, homogeneity of $q_4$ makes the tilt scale free and gives $H_\sigma(p)=\tfrac{s^2}{s^2+\sigma^2}\,UC_qU^\top$ exactly, with $C_q=\diag(4.636,1.364)$ and $\tr C_q=k+m=6$.  At $\sigma=0.12$, $0.18$, and $0.25$ the scalar factor is $0.895$, $0.791$, and $0.662$, so the population traces are $5.37$, $4.75$, and $3.97$ rather than $6$.  Rounding the trace statistic would return the correct order only for $\sigma<0.106$, below every noise level trained here.  Comparisons on this problem are therefore made against the exact finite-noise population operator rather than against its limit, and the experiment tests anisotropic range recovery and calibration rather than the asymptotic trace law; the circle experiments test the trace law directly.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/learned-plane.pdf}
+  \caption{Twelve independently trained denoisers for the rotated $d=16,k=2$ order-four model.  (a) The two largest learned-link eigenvalues, solid, against the exact finite-noise population tangent eigenvalues, dashed.  (b) Five operator-norm errors: the raw link, the hard top-two projector, the soft calibration $\Phi_{0.25}$, the learned link against the population link, and the tangent-normal coupling block $\|P^\perp\widehat A_\theta P\|_\op$ of the residual bound~\eqref{eq:hard-residual}.  Bands are interquartile ranges.  In both panels the horizontal axis is the training noise level; the vertical axis is the tangent eigenvalue in (a) and the operator-norm error on a logarithmic scale in (b).}
+  \label{fig:learned-plane}
+\end{figure}
+
+\begin{table}[!htbp]
+  \centering
+  \caption{Learned geometry at the middle training noise.  Entries are medians with interquartile ranges over $12$ independent seeds.  Errors are operator norms relative to the true tangent projector.  The last column thresholds learned eigenvalues at $1/2$; it is a diagnostic, not an adaptive-rank guarantee.}
+  \label{tab:learned-midscale}
+  \small
+  \setlength{\tabcolsep}{3.5pt}
+  \begin{tabular}{@{}l r c c c c@{}}
+    \toprule
+    Setting & \shortstack[c]{Population\\spectrum}
+      & \shortstack[c]{Largest learned-link\\spectrum [IQR]}
+      & \shortstack[c]{Raw error\\\mbox{[IQR]}}
+      & \shortstack[c]{Hard error\\\mbox{[IQR]}}
+      & \shortstack[c]{Rank\\success} \\
+    \midrule
+    Positive circle, $0.12$
+      & $0.993$ & $0.983\ [0.974,0.996]$ & $0.046\ [0.036,0.066]$ & $0.008\ [0.006,0.021]$ & $12/12$ \\
+    \addlinespace[2pt]
+    Zero circle, $0.12$
+      & $2.957$ & $2.485\ [2.449,2.532]$ & $1.485\ [1.449,1.532]$ & $0.009\ [0.004,0.019]$ & $12/12$ \\
+    \addlinespace[2pt]
+    \multirow{2}{*}{Rotated plane, $0.18$}
+      & $3.667$ & $2.314\ [2.282,2.619]$
+      & \multirow{2}{*}{$1.314\ [1.282,1.619]$}
+      & \multirow{2}{*}{$0.016\ [0.014,0.017]$}
+      & \multirow{2}{*}{$12/12$} \\
+      & $1.078$ & $0.816\ [0.808,0.965]$ & & & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+  \centering
+  \caption{Which calibration guarantee is in force at the middle training noise.  Medians over $12$ seeds.  Here $\eta=\|\widehat A_\theta-H_\sigma\|_\op$ is the quantity constrained by Proposition~\ref{prop:hard}, whose operator-norm bound \eqref{eq:hard-bound} requires $\eta<c_q/2$ and is reported as vacuous when it exceeds one.  The residual bound \eqref{eq:hard-residual} replaces $\eta$ by the tangent-normal coupling block $\|P^\perp\widehat A_\theta P\|_\op$ and divides by the computed separation $\delta(\widehat A_\theta)$ of \eqref{eq:computed-separation}.  The plane fails the operator-norm hypothesis while the residual bound remains informative there.}
+  \label{tab:calibration-regime}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}lccccccc@{}}
+    \toprule
+    Setting & $\eta$ & $c_q/2$ & \shortstack{Bound\\\eqref{eq:hard-bound}}
+      & $\|P^\perp\widehat A_\theta P\|_\op$ & $\delta(\widehat A_\theta)$
+      & \shortstack{Bound\\\eqref{eq:hard-residual}}
+      & \shortstack{Observed\\hard error} \\
+    \midrule
+    Positive circle, $0.12$
+      & $0.042$ & $0.496$ & $0.084$
+      & $0.0077$ & $0.948$ & $0.0081$ & $0.0081$ \\
+    Zero circle, $0.12$
+      & $0.471$ & $1.478$ & $0.319$
+      & $0.0221$ & $2.461$ & $0.0094$ & $0.0094$ \\
+    Rotated plane, $0.18$
+      & $1.355$ & $0.539$ & vacuous
+      & $0.0374$ & $0.840$ & $0.0422$ & $0.0160$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{End-to-end learned optimization ablation}
+
+The final experiment places the learned geometric estimates inside SC-DRGD on the quadratic-zero circle and rotated plane.  We compare four variants: oracle Riemannian gradient descent, a raw link followed by the raw denoiser, hard calibration only in the inner step, and hard calibration in both the step and normal-only learned landing.  Figure~\ref{fig:learned-optimization} gives each method its own step-size sweep.  On the circle, the reported gap is the projected objective $F(x_t)-F(p)=f(\pi(x_t))-f(p)$ from Theorem~\ref{thm:optimization}, with feasibility reported separately.  Both objectives have ambient gradient zero at the target, as required by Corollary~\ref{cor:local-invariant}.
+
+Using the descriptive criterion of median final gap below $10^{-3}$ and median feasibility error below $0.1$, SC-DRGD succeeds at $19/20$ tested circle step sizes and $23/24$ plane step sizes.  The corresponding counts are $0/20$ and $0/24$ for the raw method, and $7/20$ and $12/24$ for the inner-only ablation.  Two checks indicate that these counts are not artifacts of aggregating by the median or of the particular threshold.  Per-seed success rates, averaged over the tested step sizes, are $95.0\%$, $35.8\%$, and $12.1\%$ on the circle and $95.8\%$, $50.3\%$, and $3.8\%$ on the plane, in the same order.  Loosening the gap threshold to $10^{-2}$ gives circle counts $20/20$, $9/20$, and $7/20$, and tightening it to $10^{-4}$ gives $19/20$, $4/20$, and $0/20$; the ordering is unchanged throughout.
+
+The counts track the exact linear stability intervals of Section~\ref{sec:stability} more closely than the criterion alone suggests.  At $\sigma=0.12$ the population tangent eigenvalue is $c=2.957$, so those intervals are $((c-1)/c^2,(c+1)/c^2)=(0.224,0.453)$ for the raw additive update, $(1-1/c,1+1/c)=(0.662,1.338)$ for inner-only calibration, and $(0,2)$ after full calibration.  The circle grid places $5$, $7$, and $20$ of its $20$ step sizes inside these intervals, against observed counts of $0$, $7$, and $19$.  Inner-only calibration therefore agrees with the linearization exactly, and full calibration agrees at every step size but one.
+
+The residual disagreements have different causes, which the criterion does not separate.  The single calibrated failure is the smallest step size, $\gamma=0.05$, in both sweeps; there the median gap is still halving over the final fifth of the run, so the horizon of $35$ and $30$ steps is binding rather than stability.  The raw method instead remains stable inside its own interval while converging to a biased point: at its five in-interval step sizes the median final gap lies between $5.4\times10^{-2}$ and $8.2\times10^{-2}$, above the criterion at every threshold tested.  Its $0/20$ therefore records density-dependent bias rather than divergence, which is the effect calibration is intended to remove.  These grid counts describe this benchmark and are not universal stability guarantees.
+
+Because each denoiser is noise conditional and trained at three levels, the same models can be run at every trained level without retraining, which tests the noise dependence that Corollary~\ref{cor:local-invariant} predicts.  Taking for each noise level the smallest median final value over the step-size grid, the feasibility floor of SC-DRGD is $6.7\times10^{-3}$, $1.7\times10^{-2}$, and $6.1\times10^{-2}$ at $\sigma=0.08,0.12,0.18$ on the circle, and $1.2\times10^{-3}$, $3.5\times10^{-3}$, and $1.2\times10^{-2}$ at $\sigma=0.12,0.18,0.25$ on the plane.  Fitting a power law over each range gives exponents $2.7$ and $3.2$.  The theory predicts an $O(\sigma^2)$ floor, which is an upper bound, so decay at least this fast is consistent with it; the ratios $\text{feasibility}/\sigma^2$ stay within a factor of two over the circle range and a factor of $2.4$ over the plane range.  The objective gap is not a useful floor diagnostic on these problems, since the calibrated iteration contracts it to $10^{-10}$ or below within the horizon and the residual is set by the number of iterations rather than by $\sigma$.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/learned-optimization.pdf}
+  \caption{End-to-end learned optimization over method-specific step-size sweeps.  Curves are median final objective gaps and bands are interquartile ranges over $12$ independently trained models per problem; dashed gray is oracle Riemannian gradient descent.  Left: quadratic-zero circle after $35$ steps.  Right: rotated order-four plane after $30$ steps.  Values at or below $10^{-8}$ are shown at the display floor.  The horizontal axis is the step size and the vertical axis is the final objective gap on a logarithmic scale.  Shading inside each panel is the interquartile range and nothing else.  The two bars above each panel, marked \emph{stable} $\gamma$, are annotations rather than data: they give the exact linear stability intervals of Section~\ref{sec:stability} at the plotted noise level, cyan for the fully raw update and violet for inner-only calibration.  The fully calibrated interval is $(0,2)$ and covers each panel entirely, so it is not drawn.  The inner-only curve descends where its bar begins, whereas the raw update is stable throughout its own bar yet converges to a biased point there.  Stability and accuracy therefore separate for the raw update, which is what calibration removes.}
+  \label{fig:learned-optimization}
+\end{figure}
+
+\FloatBarrier
+
+\section{Limitations and scope}
+\label{sec:roadmap}
+
+\paragraph{Limits of the assumptions.}
+The finite-type assumption is substantive.  For an infinitely flat one-dimensional density such as $\rho(u)\asymp e^{-1/u^2}$, Laplace's method gives typical $u^2\asymp\sigma$ and hence $\sigma^{-2}\Cov(X\mid Y=p)=\Theta(\sigma^{-1})$.  For this example, the tangent metric has no finite limit.  Definition~\ref{def:finite} is also narrower than the argument requires in a second way: it asks for a polynomial leading jet, so effective densities vanishing at a finite but non-even order, such as $\|z\|^{3}$ or $\|z\|^{1/2}$, are excluded even though the limit and the trace law hold for them.  Extending the uniform eigengap of Lemma~\ref{lem:universal-gap} beyond polynomial jets is open.  Boundaries and singular supports pose a different problem, since their local geometry is described by tangent cones rather than tangent spaces.  Appendix~\ref{app:flat} works that case out in full.
+
+Theorem~\ref{thm:finite} is also local.  A full learning guarantee would need uniform control of the population biases $\beta_H,\beta_L$, the eigengap, and the optimizer's visited set.  It would further have to turn denoising training risk, typically an $L^2$ quantity, into the local score-Jacobian errors required by Corollary~\ref{cor:learned}.
+
+\paragraph{Coverage of the experiments.}
+The learned studies are controlled synthetic tests.  They provide no evidence yet for a large pretrained diffusion model or real data.  Every experiment has ambient dimension $d\le16$ and intrinsic dimension $k\le2$, and the population and finite-sample studies are $d=2$, $k=1$ throughout.  Two jet families are tested, the radial $\theta^{2r}$ on the circle and one anisotropic quartic on the plane, and that plane is affine, so every curvature-dependent term in Theorem~\ref{thm:normal-boundary} vanishes on it.  Appendix~\ref{app:spiral} partly closes this by placing a finite-type zero on a spiral whose curvature varies by a factor of five along the arc, where the limit is still $k+m$ and the $O(\sigma^2)$ remainder is found to scale as the square of the curvature $\kappa$; that check is nonetheless still $k=1$, so curvature combined with several tangent directions remains untested.  A single random frame $U$ was drawn; because the construction is equivariant under rotation this is not a loss of generality, but it does mean frame-to-frame variability is not sampled.  Hard calibration uses the known value of $k$, while the fixed threshold is reported only as a rank diagnostic.  Because the largest learned-link eigenvalues can remain materially biased even when the eigenspace is accurate, the trace law is not a reliable empirical estimator of vanishing order without further sample and Jacobian control.  Query-focused resampling depends only on the noisy input and therefore preserves the population conditional mean, but it remains part of the benchmark design.  Larger architectures, adaptive eigengap selection, and real-data validation are open empirical questions.
+
+The population claims can be checked directly against the $q_m$-tilted Gaussian spectrum, trace law, and density-floor crossover.  For a learned Jacobian, Proposition~\ref{prop:hard} guarantees stable calibration when estimation error is sufficiently smaller than the tangent-normal eigengap.  It makes no converse claim once the error becomes comparable to the gap.  The per-seed tables include failures as well as successes, allowing the empirical behavior to be inspected without relying on plotted medians.
+
+\paragraph{Practical scope.}
+Low-probability regions can change the scale of score-derived geometry, including when an optimizer leaves high-density modes.  Calibration addresses that geometric effect.  It does not certify that a learned manifold represents valid or safe designs; domain constraints and downstream validation remain necessary.
+
+\section{Conclusion}
+
+At a regular positive-density point, the denoiser-Jacobian limit is the tangent projector.  At a finite-type zero, its range and nonzero eigenvalue scale have different interpretations.  The limit is $UC_{q_m}U^\top$: its range is the tangent space, while its positive eigenvalues depend on the leading density jet and sum to $k+m$.  The density-floor calculation and the $O(\sigma)$ moving-query analysis give explicit transition laws and identify where this distinction persists.
+
+When population bias and learned-Jacobian error are below the tangent-normal eigengap, spectral projection estimates the tangent projector with controlled error.  The optimization analysis treats calibration in both the tangent update and the landing map, and the experiments compare this choice with partially calibrated and raw variants.  Population quadrature, finite-sample posterior estimation, and learned-denoiser experiments exhibit the predicted separation between tangent range and eigenvalue scale.  In the finite-type small-noise limit, the nonzero eigenspace retains tangent geometry, whereas the raw eigenvalue scale remains density dependent.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+\input{appendix}
+
+\end{document}

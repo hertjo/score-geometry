@@ -1,0 +1,44 @@
+{
+  "configuration": {
+    "hidden": 96,
+    "steps": 3500,
+    "batch_size": 768,
+    "pool_factor": 8,
+    "focus_fraction": 0.85,
+    "learning_rate": 0.0025,
+    "final_learning_rate": 0.00025,
+    "weight_decay": 2e-06,
+    "gradient_clip": 8.0,
+    "seeds": 12,
+    "circle_sigmas": [
+      0.08,
+      0.12,
+      0.18
+    ],
+    "plane_sigmas": [
+      0.12,
+      0.18,
+      0.25
+    ],
+    "circle_focus_radius": 0.22,
+    "plane_focus_radius": 0.38,
+    "plane_dim": 16,
+    "plane_order": 4,
+    "plane_anisotropy": 0.1,
+    "plane_tau": 0.35,
+    "validation_size": 20000
+  },
+  "base_seed": 2026081900,
+  "frame_seed": 2026081901,
+  "bootstrap_seed": 2026081999,
+  "python": "3.12.13",
+  "numpy": "2.3.5",
+  "platform": "macOS-26.4-arm64-arm-64bit",
+  "machine": "arm64",
+  "total_wall_seconds": 169.79174804198556,
+  "notes": [
+    "CPU-only NumPy implementation; no accelerator was used.",
+    "Every MLP parameter is optimized; Jacobians are analytic.",
+    "Focused resampling depends only on Y and therefore preserves E[X|Y=y]."
+  ]
+}
